@@ -321,4 +321,61 @@ service / on new http:Listener(8080) {
         return response;
     }
 
+    resource function post access\-requests/[int requestId]/revoke()
+        returns http:Response|error {
+
+        http:Response response = new;
+
+        ApprovalLookup|sql:Error lookupResult =
+            dbClient->queryRow(
+                `SELECT
+                    id,
+                    status,
+                    duration_minutes
+                FROM access_requests
+                WHERE id = ${requestId}`
+            );
+
+        if lookupResult is sql:NoRowsError {
+            response.statusCode = 404;
+
+            response.setJsonPayload({
+                message: "Access request not found"
+            });
+
+            return response;
+        }
+
+        if lookupResult is sql:Error {
+            return lookupResult;
+        }
+
+        if lookupResult.status != "ACTIVE" {
+            response.statusCode = 400;
+
+            response.setJsonPayload({
+                message: "Only ACTIVE requests can be revoked",
+                currentStatus: lookupResult.status
+            });
+
+            return response;
+        }
+
+        _ = check dbClient->execute(
+            `UPDATE access_requests
+            SET status = 'REVOKED'
+            WHERE id = ${requestId}`
+        );
+
+        response.statusCode = 200;
+
+        response.setJsonPayload({
+            message: "Access request revoked successfully",
+            requestId: requestId,
+            status: "REVOKED"
+        });
+
+        return response;
+    }
+
 }
