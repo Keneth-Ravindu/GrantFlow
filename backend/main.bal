@@ -49,6 +49,22 @@ type ApprovedRequest record {|
     string expires_at;
 |};
 
+type AccessCheck record {|
+    int id;
+    string status;
+    string? expires_at;
+|};
+
+function expireOldRequests() returns error? {
+    _ = check dbClient->execute(
+        `UPDATE access_requests
+         SET status = 'EXPIRED'
+         WHERE status = 'ACTIVE'
+           AND expires_at IS NOT NULL
+           AND expires_at <= CURRENT_TIMESTAMP`
+    );
+}
+
 service / on new http:Listener(8080) {
 
     resource function get health() returns json {
@@ -84,33 +100,41 @@ service / on new http:Listener(8080) {
 
         if request.requesterEmail.trim().length() == 0 {
             response.statusCode = 400;
+
             response.setJsonPayload({
                 message: "Requester email is required"
             });
+
             return response;
         }
 
         if request.reason.trim().length() == 0 {
             response.statusCode = 400;
+
             response.setJsonPayload({
                 message: "Reason is required"
             });
+
             return response;
         }
 
         if request.durationMinutes <= 0 {
             response.statusCode = 400;
+
             response.setJsonPayload({
                 message: "Duration must be greater than zero"
             });
+
             return response;
         }
 
         if request.durationMinutes > 480 {
             response.statusCode = 400;
+
             response.setJsonPayload({
                 message: "Duration cannot exceed 480 minutes"
             });
+
             return response;
         }
 
@@ -145,6 +169,9 @@ service / on new http:Listener(8080) {
     }
 
     resource function get access\-requests() returns AccessRequest[]|error {
+
+        check expireOldRequests();
+
         stream<record {|
             int id;
             string requester_email;
@@ -275,8 +302,8 @@ service / on new http:Listener(8080) {
                     id,
                     status,
                     duration_minutes
-                FROM access_requests
-                WHERE id = ${requestId}`
+                 FROM access_requests
+                 WHERE id = ${requestId}`
             );
 
         if lookupResult is sql:NoRowsError {
@@ -306,8 +333,8 @@ service / on new http:Listener(8080) {
 
         _ = check dbClient->execute(
             `UPDATE access_requests
-            SET status = 'REJECTED'
-            WHERE id = ${requestId}`
+             SET status = 'REJECTED'
+             WHERE id = ${requestId}`
         );
 
         response.statusCode = 200;
@@ -332,8 +359,8 @@ service / on new http:Listener(8080) {
                     id,
                     status,
                     duration_minutes
-                FROM access_requests
-                WHERE id = ${requestId}`
+                 FROM access_requests
+                 WHERE id = ${requestId}`
             );
 
         if lookupResult is sql:NoRowsError {
@@ -363,8 +390,8 @@ service / on new http:Listener(8080) {
 
         _ = check dbClient->execute(
             `UPDATE access_requests
-            SET status = 'REVOKED'
-            WHERE id = ${requestId}`
+             SET status = 'REVOKED'
+             WHERE id = ${requestId}`
         );
 
         response.statusCode = 200;
@@ -378,4 +405,48 @@ service / on new http:Listener(8080) {
         return response;
     }
 
+    resource function get access\-requests/[int requestId]/access()
+        returns http:Response|error {
+
+        http:Response response = new;
+
+        check expireOldRequests();
+
+        AccessCheck|sql:Error lookupResult =
+            dbClient->queryRow(
+                `SELECT
+                    id,
+                    status,
+                    expires_at::text
+                 FROM access_requests
+                 WHERE id = ${requestId}`
+            );
+
+        if lookupResult is sql:NoRowsError {
+            response.statusCode = 404;
+
+            response.setJsonPayload({
+                message: "Access request not found"
+            });
+
+            return response;
+        }
+
+        if lookupResult is sql:Error {
+            return lookupResult;
+        }
+
+        boolean accessGranted = lookupResult.status == "ACTIVE";
+
+        response.statusCode = 200;
+
+        response.setJsonPayload({
+            requestId: lookupResult.id,
+            access: accessGranted,
+            status: lookupResult.status,
+            expiresAt: lookupResult.expires_at
+        });
+
+        return response;
+    }
 }
