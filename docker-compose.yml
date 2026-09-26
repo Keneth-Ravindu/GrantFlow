@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: grantflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grantflow_db
+      POSTGRES_USER: grantflow_user
+      POSTGRES_PASSWORD: grantflow_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - grantflow_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  grantflow_postgres_data:
