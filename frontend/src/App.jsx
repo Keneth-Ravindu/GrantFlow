@@ -1,0 +1,312 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
+import "./App.css";
+
+function App() {
+  const [resources, setResources] = useState([]);
+  const [requests, setRequests] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [selectedResource, setSelectedResource] = useState(null);
+  const [reason, setReason] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState(30);
+
+  const [requestMessage, setRequestMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchResources();
+    fetchRequests();
+  }, []);
+
+  const fetchResources = async () => {
+    try {
+      const response = await axios.get(
+        "http://localhost:8080/resources"
+      );
+
+      setResources(response.data);
+    } catch (err) {
+      console.error(err);
+      setError("Unable to load protected resources.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRequests = async () => {
+    try {
+      const response = await axios.get(
+        "http://localhost:8080/access-requests"
+      );
+
+      setRequests(response.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openRequestForm = (resource) => {
+    setSelectedResource(resource);
+    setReason("");
+    setDurationMinutes(30);
+    setRequestMessage("");
+  };
+
+  const closeRequestForm = () => {
+    setSelectedResource(null);
+    setReason("");
+    setRequestMessage("");
+  };
+
+  const submitAccessRequest = async (event) => {
+    event.preventDefault();
+
+    if (!reason.trim()) {
+      setRequestMessage("Please enter a reason for the request.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setRequestMessage("");
+
+      const response = await axios.post(
+        "http://localhost:8080/access-requests",
+        {
+          requesterEmail: "ken@example.com",
+          resourceId: selectedResource.id,
+          reason: reason,
+          durationMinutes: Number(durationMinutes),
+        }
+      );
+
+      setRequestMessage(
+        `Request #${response.data.requestId} created successfully. Status: ${response.data.status}`
+      );
+
+      setReason("");
+
+      await fetchRequests();
+    } catch (err) {
+      console.error(err);
+
+      const message =
+        err.response?.data?.message ||
+        "Unable to create access request.";
+
+      setRequestMessage(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getResourceName = (resourceId) => {
+    const resource = resources.find(
+      (item) => item.id === resourceId
+    );
+
+    return resource ? resource.name : `Resource #${resourceId}`;
+  };
+
+  const getStatusClass = (status) => {
+    return `status-badge status-${status.toLowerCase()}`;
+  };
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div>
+          <h1>GrantFlow</h1>
+          <p>Just-in-Time Access Management</p>
+        </div>
+      </header>
+
+      <main className="main-content">
+        <section>
+          <h2>Protected Resources</h2>
+
+          <p className="section-description">
+            Request temporary access to protected engineering resources.
+          </p>
+
+          {loading && <p>Loading resources...</p>}
+
+          {error && <p className="error">{error}</p>}
+
+          <div className="resource-grid">
+            {resources.map((resource) => (
+              <div className="resource-card" key={resource.id}>
+                <h3>{resource.name}</h3>
+
+                <p>{resource.description}</p>
+
+                <button onClick={() => openRequestForm(resource)}>
+                  Request Access
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="requests-section">
+          <div className="section-header">
+            <div>
+              <h2>My Requests</h2>
+
+              <p className="section-description">
+                Track your temporary access requests.
+              </p>
+            </div>
+
+            <button
+              className="refresh-button"
+              onClick={fetchRequests}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="empty-state">
+              <p>No access requests yet.</p>
+            </div>
+          ) : (
+            <div className="requests-list">
+              {requests.map((request) => (
+                <div className="request-card" key={request.id}>
+                  <div className="request-top-row">
+                    <div>
+                      <span className="request-id">
+                        Request #{request.id}
+                      </span>
+
+                      <h3>
+                        {getResourceName(request.resourceId)}
+                      </h3>
+                    </div>
+
+                    <span
+                      className={getStatusClass(request.status)}
+                    >
+                      {request.status}
+                    </span>
+                  </div>
+
+                  <div className="request-details">
+                    <div>
+                      <span className="detail-label">Reason</span>
+                      <p>{request.reason}</p>
+                    </div>
+
+                    <div>
+                      <span className="detail-label">Duration</span>
+                      <p>{request.durationMinutes} minutes</p>
+                    </div>
+
+                    <div>
+                      <span className="detail-label">Requested</span>
+                      <p>{request.requestedAt}</p>
+                    </div>
+
+                    {request.approvedAt && (
+                      <div>
+                        <span className="detail-label">
+                          Approved
+                        </span>
+                        <p>{request.approvedAt}</p>
+                      </div>
+                    )}
+
+                    {request.expiresAt && (
+                      <div>
+                        <span className="detail-label">
+                          Expires
+                        </span>
+                        <p>{request.expiresAt}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {selectedResource && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <button
+                className="close-button"
+                onClick={closeRequestForm}
+                type="button"
+              >
+                ×
+              </button>
+
+              <h2>Request Access</h2>
+
+              <p className="selected-resource">
+                {selectedResource.name}
+              </p>
+
+              <form onSubmit={submitAccessRequest}>
+                <label htmlFor="reason">Reason</label>
+
+                <textarea
+                  id="reason"
+                  value={reason}
+                  onChange={(event) =>
+                    setReason(event.target.value)
+                  }
+                  placeholder="Explain why you need temporary access..."
+                  rows="4"
+                />
+
+                <label htmlFor="duration">Duration</label>
+
+                <select
+                  id="duration"
+                  value={durationMinutes}
+                  onChange={(event) =>
+                    setDurationMinutes(event.target.value)
+                  }
+                >
+                  <option value="1">
+                    1 minute (testing)
+                  </option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="60">1 hour</option>
+                  <option value="120">2 hours</option>
+                  <option value="240">4 hours</option>
+                  <option value="480">8 hours</option>
+                </select>
+
+                <button
+                  className="submit-button"
+                  type="submit"
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? "Submitting..."
+                    : "Submit Request"}
+                </button>
+              </form>
+
+              {requestMessage && (
+                <p className="request-message">
+                  {requestMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default App;

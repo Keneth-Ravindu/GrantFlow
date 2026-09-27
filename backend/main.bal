@@ -65,6 +65,14 @@ function expireOldRequests() returns error? {
     );
 }
 
+@http:ServiceConfig {
+    cors: {
+        allowOrigins: ["http://localhost:5173"],
+        allowMethods: ["GET", "POST", "OPTIONS"],
+        allowHeaders: ["Content-Type", "Authorization"],
+        allowCredentials: false
+    }
+}
 service / on new http:Listener(8080) {
 
     resource function get health() returns json {
