@@ -19,9 +19,30 @@ function App() {
   const [adminMessage, setAdminMessage] = useState("");
   const [adminLoadingId, setAdminLoadingId] = useState(null);
 
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
   useEffect(() => {
     fetchResources();
     fetchRequests();
+  }, []);
+
+  // Updates countdown displays every second.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Refreshes backend state every 5 seconds.
+  // GET /access-requests also runs the backend expiration check.
+  useEffect(() => {
+    const refreshTimer = setInterval(() => {
+      fetchRequests();
+    }, 5000);
+
+    return () => clearInterval(refreshTimer);
   }, []);
 
   const fetchResources = async () => {
@@ -81,7 +102,7 @@ function App() {
         {
           requesterEmail: "ken@example.com",
           resourceId: selectedResource.id,
-          reason: reason,
+          reason,
           durationMinutes: Number(durationMinutes),
         }
       );
@@ -96,11 +117,10 @@ function App() {
     } catch (err) {
       console.error(err);
 
-      const message =
+      setRequestMessage(
         err.response?.data?.message ||
-        "Unable to create access request.";
-
-      setRequestMessage(message);
+        "Unable to create access request."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -189,11 +209,43 @@ function App() {
       (item) => item.id === resourceId
     );
 
-    return resource ? resource.name : `Resource #${resourceId}`;
+    return resource
+      ? resource.name
+      : `Resource #${resourceId}`;
   };
 
   const getStatusClass = (status) => {
     return `status-badge status-${status.toLowerCase()}`;
+  };
+
+  const getRemainingTime = (expiresAt) => {
+    if (!expiresAt) {
+      return null;
+    }
+
+    const expiryTime = new Date(
+      expiresAt.replace(" ", "T")
+    ).getTime();
+
+    const difference = expiryTime - currentTime;
+
+    if (difference <= 0) {
+      return "00:00:00";
+    }
+
+    const totalSeconds = Math.floor(difference / 1000);
+
+    const hours = Math.floor(totalSeconds / 3600);
+
+    const minutes = Math.floor(
+      (totalSeconds % 3600) / 60
+    );
+
+    const seconds = totalSeconds % 60;
+
+    return `${String(hours).padStart(2, "0")}:${String(
+      minutes
+    ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
   const pendingRequests = requests.filter(
@@ -218,7 +270,8 @@ function App() {
           <h2>Protected Resources</h2>
 
           <p className="section-description">
-            Request temporary access to protected engineering resources.
+            Request temporary access to protected engineering
+            resources.
           </p>
 
           {loading && <p>Loading resources...</p>}
@@ -227,12 +280,19 @@ function App() {
 
           <div className="resource-grid">
             {resources.map((resource) => (
-              <div className="resource-card" key={resource.id}>
+              <div
+                className="resource-card"
+                key={resource.id}
+              >
                 <h3>{resource.name}</h3>
 
                 <p>{resource.description}</p>
 
-                <button onClick={() => openRequestForm(resource)}>
+                <button
+                  onClick={() =>
+                    openRequestForm(resource)
+                  }
+                >
                   Request Access
                 </button>
               </div>
@@ -265,7 +325,10 @@ function App() {
           ) : (
             <div className="requests-list">
               {requests.map((request) => (
-                <div className="request-card" key={request.id}>
+                <div
+                  className="request-card"
+                  key={request.id}
+                >
                   <div className="request-top-row">
                     <div>
                       <span className="request-id">
@@ -273,30 +336,57 @@ function App() {
                       </span>
 
                       <h3>
-                        {getResourceName(request.resourceId)}
+                        {getResourceName(
+                          request.resourceId
+                        )}
                       </h3>
                     </div>
 
                     <span
-                      className={getStatusClass(request.status)}
+                      className={getStatusClass(
+                        request.status
+                      )}
                     >
                       {request.status}
                     </span>
                   </div>
 
+                  {request.status === "ACTIVE" &&
+                    request.expiresAt && (
+                      <div className="countdown-box">
+                        <span className="countdown-label">
+                          Access expires in
+                        </span>
+
+                        <span className="countdown-time">
+                          {getRemainingTime(
+                            request.expiresAt
+                          )}
+                        </span>
+                      </div>
+                    )}
+
                   <div className="request-details">
                     <div>
-                      <span className="detail-label">Reason</span>
+                      <span className="detail-label">
+                        Reason
+                      </span>
                       <p>{request.reason}</p>
                     </div>
 
                     <div>
-                      <span className="detail-label">Duration</span>
-                      <p>{request.durationMinutes} minutes</p>
+                      <span className="detail-label">
+                        Duration
+                      </span>
+                      <p>
+                        {request.durationMinutes} minutes
+                      </p>
                     </div>
 
                     <div>
-                      <span className="detail-label">Requested</span>
+                      <span className="detail-label">
+                        Requested
+                      </span>
                       <p>{request.requestedAt}</p>
                     </div>
 
@@ -336,7 +426,9 @@ function App() {
           </div>
 
           {adminMessage && (
-            <p className="admin-message">{adminMessage}</p>
+            <p className="admin-message">
+              {adminMessage}
+            </p>
           )}
 
           <div className="admin-grid">
@@ -349,10 +441,15 @@ function App() {
                 </p>
               ) : (
                 pendingRequests.map((request) => (
-                  <div className="admin-request-card" key={request.id}>
+                  <div
+                    className="admin-request-card"
+                    key={request.id}
+                  >
                     <div>
                       <strong>
-                        {getResourceName(request.resourceId)}
+                        {getResourceName(
+                          request.resourceId
+                        )}
                       </strong>
 
                       <p>{request.reason}</p>
@@ -369,7 +466,9 @@ function App() {
                         onClick={() =>
                           approveRequest(request.id)
                         }
-                        disabled={adminLoadingId === request.id}
+                        disabled={
+                          adminLoadingId === request.id
+                        }
                       >
                         Approve
                       </button>
@@ -379,7 +478,9 @@ function App() {
                         onClick={() =>
                           rejectRequest(request.id)
                         }
-                        disabled={adminLoadingId === request.id}
+                        disabled={
+                          adminLoadingId === request.id
+                        }
                       >
                         Reject
                       </button>
@@ -398,10 +499,15 @@ function App() {
                 </p>
               ) : (
                 activeRequests.map((request) => (
-                  <div className="admin-request-card" key={request.id}>
+                  <div
+                    className="admin-request-card"
+                    key={request.id}
+                  >
                     <div>
                       <strong>
-                        {getResourceName(request.resourceId)}
+                        {getResourceName(
+                          request.resourceId
+                        )}
                       </strong>
 
                       <p>{request.reason}</p>
@@ -410,11 +516,15 @@ function App() {
                         {request.requesterEmail}
                       </small>
 
-                      {request.expiresAt && (
-                        <small className="expires-text">
-                          Expires: {request.expiresAt}
-                        </small>
-                      )}
+                      <div className="admin-countdown">
+                        <span>Expires in</span>
+
+                        <strong>
+                          {getRemainingTime(
+                            request.expiresAt
+                          )}
+                        </strong>
+                      </div>
                     </div>
 
                     <div className="admin-actions">
@@ -423,7 +533,9 @@ function App() {
                         onClick={() =>
                           revokeRequest(request.id)
                         }
-                        disabled={adminLoadingId === request.id}
+                        disabled={
+                          adminLoadingId === request.id
+                        }
                       >
                         Revoke
                       </button>
@@ -453,7 +565,9 @@ function App() {
               </p>
 
               <form onSubmit={submitAccessRequest}>
-                <label htmlFor="reason">Reason</label>
+                <label htmlFor="reason">
+                  Reason
+                </label>
 
                 <textarea
                   id="reason"
@@ -465,24 +579,46 @@ function App() {
                   rows="4"
                 />
 
-                <label htmlFor="duration">Duration</label>
+                <label htmlFor="duration">
+                  Duration
+                </label>
 
                 <select
                   id="duration"
                   value={durationMinutes}
                   onChange={(event) =>
-                    setDurationMinutes(event.target.value)
+                    setDurationMinutes(
+                      event.target.value
+                    )
                   }
                 >
                   <option value="1">
                     1 minute (testing)
                   </option>
-                  <option value="15">15 minutes</option>
-                  <option value="30">30 minutes</option>
-                  <option value="60">1 hour</option>
-                  <option value="120">2 hours</option>
-                  <option value="240">4 hours</option>
-                  <option value="480">8 hours</option>
+
+                  <option value="15">
+                    15 minutes
+                  </option>
+
+                  <option value="30">
+                    30 minutes
+                  </option>
+
+                  <option value="60">
+                    1 hour
+                  </option>
+
+                  <option value="120">
+                    2 hours
+                  </option>
+
+                  <option value="240">
+                    4 hours
+                  </option>
+
+                  <option value="480">
+                    8 hours
+                  </option>
                 </select>
 
                 <button
