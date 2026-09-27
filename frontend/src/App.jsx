@@ -16,6 +16,9 @@ function App() {
   const [requestMessage, setRequestMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [adminMessage, setAdminMessage] = useState("");
+  const [adminLoadingId, setAdminLoadingId] = useState(null);
+
   useEffect(() => {
     fetchResources();
     fetchRequests();
@@ -103,6 +106,84 @@ function App() {
     }
   };
 
+  const approveRequest = async (requestId) => {
+    try {
+      setAdminLoadingId(requestId);
+      setAdminMessage("");
+
+      const response = await axios.post(
+        `http://localhost:8080/access-requests/${requestId}/approve`
+      );
+
+      setAdminMessage(
+        `Request #${requestId} approved. Status: ${response.data.status}`
+      );
+
+      await fetchRequests();
+    } catch (err) {
+      console.error(err);
+
+      setAdminMessage(
+        err.response?.data?.message ||
+        "Unable to approve request."
+      );
+    } finally {
+      setAdminLoadingId(null);
+    }
+  };
+
+  const rejectRequest = async (requestId) => {
+    try {
+      setAdminLoadingId(requestId);
+      setAdminMessage("");
+
+      const response = await axios.post(
+        `http://localhost:8080/access-requests/${requestId}/reject`
+      );
+
+      setAdminMessage(
+        `Request #${requestId} rejected. Status: ${response.data.status}`
+      );
+
+      await fetchRequests();
+    } catch (err) {
+      console.error(err);
+
+      setAdminMessage(
+        err.response?.data?.message ||
+        "Unable to reject request."
+      );
+    } finally {
+      setAdminLoadingId(null);
+    }
+  };
+
+  const revokeRequest = async (requestId) => {
+    try {
+      setAdminLoadingId(requestId);
+      setAdminMessage("");
+
+      const response = await axios.post(
+        `http://localhost:8080/access-requests/${requestId}/revoke`
+      );
+
+      setAdminMessage(
+        `Request #${requestId} revoked. Status: ${response.data.status}`
+      );
+
+      await fetchRequests();
+    } catch (err) {
+      console.error(err);
+
+      setAdminMessage(
+        err.response?.data?.message ||
+        "Unable to revoke request."
+      );
+    } finally {
+      setAdminLoadingId(null);
+    }
+  };
+
   const getResourceName = (resourceId) => {
     const resource = resources.find(
       (item) => item.id === resourceId
@@ -114,6 +195,14 @@ function App() {
   const getStatusClass = (status) => {
     return `status-badge status-${status.toLowerCase()}`;
   };
+
+  const pendingRequests = requests.filter(
+    (request) => request.status === "PENDING"
+  );
+
+  const activeRequests = requests.filter(
+    (request) => request.status === "ACTIVE"
+  );
 
   return (
     <div className="app">
@@ -233,6 +322,117 @@ function App() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="admin-section">
+          <div className="section-header">
+            <div>
+              <h2>Admin Dashboard</h2>
+
+              <p className="section-description">
+                Review and manage temporary access requests.
+              </p>
+            </div>
+          </div>
+
+          {adminMessage && (
+            <p className="admin-message">{adminMessage}</p>
+          )}
+
+          <div className="admin-grid">
+            <div className="admin-panel">
+              <h3>Pending Requests</h3>
+
+              {pendingRequests.length === 0 ? (
+                <p className="muted-text">
+                  No pending requests.
+                </p>
+              ) : (
+                pendingRequests.map((request) => (
+                  <div className="admin-request-card" key={request.id}>
+                    <div>
+                      <strong>
+                        {getResourceName(request.resourceId)}
+                      </strong>
+
+                      <p>{request.reason}</p>
+
+                      <small>
+                        {request.requesterEmail} ·{" "}
+                        {request.durationMinutes} minutes
+                      </small>
+                    </div>
+
+                    <div className="admin-actions">
+                      <button
+                        className="approve-button"
+                        onClick={() =>
+                          approveRequest(request.id)
+                        }
+                        disabled={adminLoadingId === request.id}
+                      >
+                        Approve
+                      </button>
+
+                      <button
+                        className="reject-button"
+                        onClick={() =>
+                          rejectRequest(request.id)
+                        }
+                        disabled={adminLoadingId === request.id}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="admin-panel">
+              <h3>Active Access</h3>
+
+              {activeRequests.length === 0 ? (
+                <p className="muted-text">
+                  No active access grants.
+                </p>
+              ) : (
+                activeRequests.map((request) => (
+                  <div className="admin-request-card" key={request.id}>
+                    <div>
+                      <strong>
+                        {getResourceName(request.resourceId)}
+                      </strong>
+
+                      <p>{request.reason}</p>
+
+                      <small>
+                        {request.requesterEmail}
+                      </small>
+
+                      {request.expiresAt && (
+                        <small className="expires-text">
+                          Expires: {request.expiresAt}
+                        </small>
+                      )}
+                    </div>
+
+                    <div className="admin-actions">
+                      <button
+                        className="revoke-button"
+                        onClick={() =>
+                          revokeRequest(request.id)
+                        }
+                        disabled={adminLoadingId === request.id}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </section>
 
         {selectedResource && (
