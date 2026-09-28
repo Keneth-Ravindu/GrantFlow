@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useAsgardeo } from "@asgardeo/react";
 import "./App.css";
 
 function App() {
+  const { user } = useAsgardeo();
+
+  const authenticatedEmail =
+    user?.email ||
+    user?.emails?.[0] ||
+    user?.username ||
+    user?.userName ||
+    user?.sub ||
+    "";
+
   const [resources, setResources] = useState([]);
   const [requests, setRequests] = useState([]);
 
@@ -26,7 +37,6 @@ function App() {
     fetchRequests();
   }, []);
 
-  // Updates countdown displays every second.
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(Date.now());
@@ -35,8 +45,6 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Refreshes backend state every 5 seconds.
-  // GET /access-requests also runs the backend expiration check.
   useEffect(() => {
     const refreshTimer = setInterval(() => {
       fetchRequests();
@@ -93,6 +101,11 @@ function App() {
       return;
     }
 
+    if (!authenticatedEmail) {
+      setRequestMessage("Unable to determine authenticated user.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setRequestMessage("");
@@ -100,7 +113,7 @@ function App() {
       const response = await axios.post(
         "http://localhost:8080/access-requests",
         {
-          requesterEmail: "ken@example.com",
+          requesterEmail: authenticatedEmail,
           resourceId: selectedResource.id,
           reason,
           durationMinutes: Number(durationMinutes),
@@ -248,6 +261,10 @@ function App() {
     ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
+  const myRequests = requests.filter(
+    (request) => request.requesterEmail === authenticatedEmail
+  );
+
   const pendingRequests = requests.filter(
     (request) => request.status === "PENDING"
   );
@@ -262,6 +279,19 @@ function App() {
         <div>
           <h1>GrantFlow</h1>
           <p>Just-in-Time Access Management</p>
+        </div>
+
+        <div className="user-summary">
+          <span className="user-label">Signed in as</span>
+
+          <strong>
+            {user?.displayName ||
+              user?.userName ||
+              user?.username ||
+              authenticatedEmail}
+          </strong>
+
+          <small>{authenticatedEmail}</small>
         </div>
       </header>
 
@@ -318,13 +348,13 @@ function App() {
             </button>
           </div>
 
-          {requests.length === 0 ? (
+          {myRequests.length === 0 ? (
             <div className="empty-state">
               <p>No access requests yet.</p>
             </div>
           ) : (
             <div className="requests-list">
-              {requests.map((request) => (
+              {myRequests.map((request) => (
                 <div
                   className="request-card"
                   key={request.id}
