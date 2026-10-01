@@ -12,7 +12,7 @@ createRoot(document.getElementById("root")).render(
     <AsgardeoProvider
       clientId={import.meta.env.VITE_WSO2_CLIENT_ID}
       baseUrl={import.meta.env.VITE_WSO2_BASE_URL}
-      scopes={["openid", "profile", "email"]}
+      scopes={["openid", "profile", "email", "roles"]}
       afterSignInUrl="http://localhost:5173"
       afterSignOutUrl="http://localhost:5173"
     >

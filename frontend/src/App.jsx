@@ -4,7 +4,9 @@ import { useAsgardeo } from "@asgardeo/react";
 import "./App.css";
 
 function App() {
-  const { user } = useAsgardeo();
+  const { user, getDecodedIdToken } = useAsgardeo();
+
+
 
   const authenticatedEmail =
     user?.email ||
@@ -31,6 +33,20 @@ function App() {
   const [adminLoadingId, setAdminLoadingId] = useState(null);
 
   const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const inspectToken = async () => {
+      try {
+        const decodedToken = await getDecodedIdToken();
+
+        console.log("Decoded WSO2 ID token:", decodedToken);
+      } catch (error) {
+        console.error("Unable to decode WSO2 ID token:", error);
+      }
+    };
+
+    inspectToken();
+  }, [getDecodedIdToken]);
 
   useEffect(() => {
     fetchResources();
