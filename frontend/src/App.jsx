@@ -4,9 +4,7 @@ import { useAsgardeo } from "@asgardeo/react";
 import "./App.css";
 
 function App() {
-  const { user, getDecodedIdToken } = useAsgardeo();
-
-
+  const { user, http, isSignedIn } = useAsgardeo();
 
   const authenticatedEmail =
     user?.email ||
@@ -34,24 +32,54 @@ function App() {
 
   const [currentTime, setCurrentTime] = useState(Date.now());
 
-  useEffect(() => {
-    const inspectToken = async () => {
-      try {
-        const decodedToken = await getDecodedIdToken();
+  // Claims returned by WSO2's OIDC userinfo endpoint.
+  const [wso2Claims, setWso2Claims] = useState(null);
 
-        console.log("Decoded WSO2 ID token:", decodedToken);
+  // -----------------------------------------
+  // WSO2 USER CLAIMS
+  // -----------------------------------------
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      setWso2Claims(null);
+      return;
+    }
+
+    const fetchWso2Claims = async () => {
+      try {
+        const response = await http.request({
+          url: `${import.meta.env.VITE_WSO2_BASE_URL}/oauth2/userinfo`,
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+
+        setWso2Claims(response.data);
       } catch (error) {
-        console.error("Unable to decode WSO2 ID token:", error);
+        console.error(
+          "Unable to load WSO2 user claims:",
+          error
+        );
       }
     };
 
-    inspectToken();
-  }, [getDecodedIdToken]);
+    fetchWso2Claims();
+  }, [http, isSignedIn]);
+
+  // -----------------------------------------
+  // INITIAL DATA
+  // -----------------------------------------
 
   useEffect(() => {
     fetchResources();
     fetchRequests();
   }, []);
+
+  // -----------------------------------------
+  // LIVE COUNTDOWN
+  // -----------------------------------------
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -61,6 +89,10 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // -----------------------------------------
+  // AUTOMATIC REQUEST REFRESH
+  // -----------------------------------------
+
   useEffect(() => {
     const refreshTimer = setInterval(() => {
       fetchRequests();
@@ -68,6 +100,10 @@ function App() {
 
     return () => clearInterval(refreshTimer);
   }, []);
+
+  // -----------------------------------------
+  // API FUNCTIONS
+  // -----------------------------------------
 
   const fetchResources = async () => {
     try {
@@ -96,6 +132,10 @@ function App() {
     }
   };
 
+  // -----------------------------------------
+  // REQUEST ACCESS MODAL
+  // -----------------------------------------
+
   const openRequestForm = (resource) => {
     setSelectedResource(resource);
     setReason("");
@@ -109,16 +149,24 @@ function App() {
     setRequestMessage("");
   };
 
+  // -----------------------------------------
+  // CREATE ACCESS REQUEST
+  // -----------------------------------------
+
   const submitAccessRequest = async (event) => {
     event.preventDefault();
 
     if (!reason.trim()) {
-      setRequestMessage("Please enter a reason for the request.");
+      setRequestMessage(
+        "Please enter a reason for the request."
+      );
       return;
     }
 
     if (!authenticatedEmail) {
-      setRequestMessage("Unable to determine authenticated user.");
+      setRequestMessage(
+        "Unable to determine authenticated user."
+      );
       return;
     }
 
@@ -154,6 +202,10 @@ function App() {
       setSubmitting(false);
     }
   };
+
+  // -----------------------------------------
+  // ADMIN ACTIONS
+  // -----------------------------------------
 
   const approveRequest = async (requestId) => {
     try {
@@ -233,6 +285,10 @@ function App() {
     }
   };
 
+  // -----------------------------------------
+  // HELPER FUNCTIONS
+  // -----------------------------------------
+
   const getResourceName = (resourceId) => {
     const resource = resources.find(
       (item) => item.id === resourceId
@@ -262,9 +318,13 @@ function App() {
       return "00:00:00";
     }
 
-    const totalSeconds = Math.floor(difference / 1000);
+    const totalSeconds = Math.floor(
+      difference / 1000
+    );
 
-    const hours = Math.floor(totalSeconds / 3600);
+    const hours = Math.floor(
+      totalSeconds / 3600
+    );
 
     const minutes = Math.floor(
       (totalSeconds % 3600) / 60
@@ -272,13 +332,65 @@ function App() {
 
     const seconds = totalSeconds % 60;
 
-    return `${String(hours).padStart(2, "0")}:${String(
-      minutes
-    ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${String(hours).padStart(
+      2,
+      "0"
+    )}:${String(minutes).padStart(
+      2,
+      "0"
+    )}:${String(seconds).padStart(2, "0")}`;
   };
 
+  // -----------------------------------------
+  // WSO2 ROLE HANDLING
+  // -----------------------------------------
+
+  const rawRoles =
+    wso2Claims?.application_roles ??
+    wso2Claims?.roles ??
+    user?.application_roles ??
+    user?.roles ??
+    [];
+
+  const normalizedRoles = Array.isArray(rawRoles)
+    ? rawRoles
+    : typeof rawRoles === "string"
+      ? rawRoles
+        .split(",")
+        .map((role) => role.trim())
+      : [];
+
+  const isAdmin = normalizedRoles.some((role) => {
+    if (typeof role === "string") {
+      return (
+        role.toLowerCase() ===
+        "grantflow admin".toLowerCase()
+      );
+    }
+
+    if (typeof role === "object" && role !== null) {
+      const roleName =
+        role.display ||
+        role.name ||
+        role.value ||
+        "";
+
+      return (
+        roleName.toLowerCase() ===
+        "grantflow admin".toLowerCase()
+      );
+    }
+
+    return false;
+  });
+
+  // -----------------------------------------
+  // FILTER REQUESTS
+  // -----------------------------------------
+
   const myRequests = requests.filter(
-    (request) => request.requesterEmail === authenticatedEmail
+    (request) =>
+      request.requesterEmail === authenticatedEmail
   );
 
   const pendingRequests = requests.filter(
@@ -289,6 +401,10 @@ function App() {
     (request) => request.status === "ACTIVE"
   );
 
+  // -----------------------------------------
+  // UI
+  // -----------------------------------------
+
   return (
     <div className="app">
       <header className="header">
@@ -298,7 +414,9 @@ function App() {
         </div>
 
         <div className="user-summary">
-          <span className="user-label">Signed in as</span>
+          <span className="user-label">
+            Signed in as
+          </span>
 
           <strong>
             {user?.displayName ||
@@ -308,21 +426,35 @@ function App() {
           </strong>
 
           <small>{authenticatedEmail}</small>
+
+          {isAdmin && (
+            <small className="admin-user-label">
+              GrantFlow Admin
+            </small>
+          )}
         </div>
       </header>
 
       <main className="main-content">
+        {/* --------------------------------
+            PROTECTED RESOURCES
+        -------------------------------- */}
+
         <section>
           <h2>Protected Resources</h2>
 
           <p className="section-description">
-            Request temporary access to protected engineering
-            resources.
+            Request temporary access to protected
+            engineering resources.
           </p>
 
-          {loading && <p>Loading resources...</p>}
+          {loading && (
+            <p>Loading resources...</p>
+          )}
 
-          {error && <p className="error">{error}</p>}
+          {error && (
+            <p className="error">{error}</p>
+          )}
 
           <div className="resource-grid">
             {resources.map((resource) => (
@@ -345,6 +477,10 @@ function App() {
             ))}
           </div>
         </section>
+
+        {/* --------------------------------
+            MY REQUESTS
+        -------------------------------- */}
 
         <section className="requests-section">
           <div className="section-header">
@@ -417,6 +553,7 @@ function App() {
                       <span className="detail-label">
                         Reason
                       </span>
+
                       <p>{request.reason}</p>
                     </div>
 
@@ -424,8 +561,10 @@ function App() {
                       <span className="detail-label">
                         Duration
                       </span>
+
                       <p>
-                        {request.durationMinutes} minutes
+                        {request.durationMinutes}{" "}
+                        minutes
                       </p>
                     </div>
 
@@ -433,7 +572,10 @@ function App() {
                       <span className="detail-label">
                         Requested
                       </span>
-                      <p>{request.requestedAt}</p>
+
+                      <p>
+                        {request.requestedAt}
+                      </p>
                     </div>
 
                     {request.approvedAt && (
@@ -441,7 +583,10 @@ function App() {
                         <span className="detail-label">
                           Approved
                         </span>
-                        <p>{request.approvedAt}</p>
+
+                        <p>
+                          {request.approvedAt}
+                        </p>
                       </div>
                     )}
 
@@ -450,7 +595,10 @@ function App() {
                         <span className="detail-label">
                           Expires
                         </span>
-                        <p>{request.expiresAt}</p>
+
+                        <p>
+                          {request.expiresAt}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -460,138 +608,180 @@ function App() {
           )}
         </section>
 
-        <section className="admin-section">
-          <div className="section-header">
-            <div>
-              <h2>Admin Dashboard</h2>
+        {/* --------------------------------
+            ADMIN DASHBOARD
+        -------------------------------- */}
 
-              <p className="section-description">
-                Review and manage temporary access requests.
+        {isAdmin && (
+          <section className="admin-section">
+            <div className="section-header">
+              <div>
+                <h2>Admin Dashboard</h2>
+
+                <p className="section-description">
+                  Review and manage temporary access
+                  requests.
+                </p>
+              </div>
+            </div>
+
+            {adminMessage && (
+              <p className="admin-message">
+                {adminMessage}
               </p>
-            </div>
-          </div>
+            )}
 
-          {adminMessage && (
-            <p className="admin-message">
-              {adminMessage}
-            </p>
-          )}
+            <div className="admin-grid">
+              {/* Pending Requests */}
 
-          <div className="admin-grid">
-            <div className="admin-panel">
-              <h3>Pending Requests</h3>
+              <div className="admin-panel">
+                <h3>Pending Requests</h3>
 
-              {pendingRequests.length === 0 ? (
-                <p className="muted-text">
-                  No pending requests.
-                </p>
-              ) : (
-                pendingRequests.map((request) => (
-                  <div
-                    className="admin-request-card"
-                    key={request.id}
-                  >
-                    <div>
-                      <strong>
-                        {getResourceName(
-                          request.resourceId
-                        )}
-                      </strong>
-
-                      <p>{request.reason}</p>
-
-                      <small>
-                        {request.requesterEmail} ·{" "}
-                        {request.durationMinutes} minutes
-                      </small>
-                    </div>
-
-                    <div className="admin-actions">
-                      <button
-                        className="approve-button"
-                        onClick={() =>
-                          approveRequest(request.id)
-                        }
-                        disabled={
-                          adminLoadingId === request.id
-                        }
+                {pendingRequests.length === 0 ? (
+                  <p className="muted-text">
+                    No pending requests.
+                  </p>
+                ) : (
+                  pendingRequests.map(
+                    (request) => (
+                      <div
+                        className="admin-request-card"
+                        key={request.id}
                       >
-                        Approve
-                      </button>
+                        <div>
+                          <strong>
+                            {getResourceName(
+                              request.resourceId
+                            )}
+                          </strong>
 
-                      <button
-                        className="reject-button"
-                        onClick={() =>
-                          rejectRequest(request.id)
-                        }
-                        disabled={
-                          adminLoadingId === request.id
-                        }
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                          <p>
+                            {request.reason}
+                          </p>
 
-            <div className="admin-panel">
-              <h3>Active Access</h3>
+                          <small>
+                            {
+                              request.requesterEmail
+                            }{" "}
+                            ·{" "}
+                            {
+                              request.durationMinutes
+                            }{" "}
+                            minutes
+                          </small>
+                        </div>
 
-              {activeRequests.length === 0 ? (
-                <p className="muted-text">
-                  No active access grants.
-                </p>
-              ) : (
-                activeRequests.map((request) => (
-                  <div
-                    className="admin-request-card"
-                    key={request.id}
-                  >
-                    <div>
-                      <strong>
-                        {getResourceName(
-                          request.resourceId
-                        )}
-                      </strong>
+                        <div className="admin-actions">
+                          <button
+                            className="approve-button"
+                            onClick={() =>
+                              approveRequest(
+                                request.id
+                              )
+                            }
+                            disabled={
+                              adminLoadingId ===
+                              request.id
+                            }
+                          >
+                            Approve
+                          </button>
 
-                      <p>{request.reason}</p>
-
-                      <small>
-                        {request.requesterEmail}
-                      </small>
-
-                      <div className="admin-countdown">
-                        <span>Expires in</span>
-
-                        <strong>
-                          {getRemainingTime(
-                            request.expiresAt
-                          )}
-                        </strong>
+                          <button
+                            className="reject-button"
+                            onClick={() =>
+                              rejectRequest(
+                                request.id
+                              )
+                            }
+                            disabled={
+                              adminLoadingId ===
+                              request.id
+                            }
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )
+                  )
+                )}
+              </div>
 
-                    <div className="admin-actions">
-                      <button
-                        className="revoke-button"
-                        onClick={() =>
-                          revokeRequest(request.id)
-                        }
-                        disabled={
-                          adminLoadingId === request.id
-                        }
+              {/* Active Access */}
+
+              <div className="admin-panel">
+                <h3>Active Access</h3>
+
+                {activeRequests.length === 0 ? (
+                  <p className="muted-text">
+                    No active access grants.
+                  </p>
+                ) : (
+                  activeRequests.map(
+                    (request) => (
+                      <div
+                        className="admin-request-card"
+                        key={request.id}
                       >
-                        Revoke
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+                        <div>
+                          <strong>
+                            {getResourceName(
+                              request.resourceId
+                            )}
+                          </strong>
+
+                          <p>
+                            {request.reason}
+                          </p>
+
+                          <small>
+                            {
+                              request.requesterEmail
+                            }
+                          </small>
+
+                          <div className="admin-countdown">
+                            <span>
+                              Expires in
+                            </span>
+
+                            <strong>
+                              {getRemainingTime(
+                                request.expiresAt
+                              )}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="admin-actions">
+                          <button
+                            className="revoke-button"
+                            onClick={() =>
+                              revokeRequest(
+                                request.id
+                              )
+                            }
+                            disabled={
+                              adminLoadingId ===
+                              request.id
+                            }
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  )
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
+
+        {/* --------------------------------
+            REQUEST ACCESS MODAL
+        -------------------------------- */}
 
         {selectedResource && (
           <div className="modal-overlay">
@@ -610,7 +800,9 @@ function App() {
                 {selectedResource.name}
               </p>
 
-              <form onSubmit={submitAccessRequest}>
+              <form
+                onSubmit={submitAccessRequest}
+              >
                 <label htmlFor="reason">
                   Reason
                 </label>
@@ -619,7 +811,9 @@ function App() {
                   id="reason"
                   value={reason}
                   onChange={(event) =>
-                    setReason(event.target.value)
+                    setReason(
+                      event.target.value
+                    )
                   }
                   placeholder="Explain why you need temporary access..."
                   rows="4"
