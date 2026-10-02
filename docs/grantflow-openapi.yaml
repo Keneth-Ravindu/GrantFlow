@@ -1,0 +1,153 @@
+openapi: 3.0.1
+
+info:
+  title: GrantFlowAPI
+  version: 1.0.0
+
+servers:
+  - url: /
+
+security:
+  - default: []
+
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Backend health status
+      security:
+        - default: []
+
+  /resources:
+    get:
+      responses:
+        '200':
+          description: List protected resources
+      security:
+        - default: []
+
+  /access-requests:
+    get:
+      responses:
+        '200':
+          description: List access requests
+      security:
+        - default: []
+
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requesterEmail
+                - resourceId
+                - reason
+                - durationMinutes
+              properties:
+                requesterEmail:
+                  type: string
+                  format: email
+                  example: ken@gmail.com
+                resourceId:
+                  type: integer
+                  example: 1
+                reason:
+                  type: string
+                  example: Investigating a production incident
+                durationMinutes:
+                  type: integer
+                  minimum: 1
+                  maximum: 480
+                  example: 30
+      responses:
+        '201':
+          description: Access request created successfully
+        '400':
+          description: Invalid request
+      security:
+        - default: []
+
+  /access-requests/{id}/approve:
+    post:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Access request approved
+      security:
+        - default: []
+
+  /access-requests/{id}/reject:
+    post:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Access request rejected
+      security:
+        - default: []
+
+  /access-requests/{id}/revoke:
+    post:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Active access revoked
+      security:
+        - default: []
+
+  /access-requests/{id}/access:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Current access status
+      security:
+        - default: []
+
+components:
+  securitySchemes:
+    default:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.com
+          scopes: {}
+
+x-wso2-production-endpoints:
+  urls:
+    - http://localhost:8080
+  type: http
+
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://localhost:8080
+  type: http
+
+x-wso2-basePath: /grantflow/1.0.0
+
+x-wso2-transports:
+  - http
+  - https
