@@ -12,3 +12,4 @@ Config.toml
 
 .env
 .env.*
+node_modules/
